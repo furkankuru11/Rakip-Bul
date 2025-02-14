@@ -623,7 +623,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.1,
+                        height: MediaQuery.of(context).size.height * 0.6,
                         child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
