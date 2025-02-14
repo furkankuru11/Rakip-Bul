@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "125996850771",
+    "project_id": "rakipbul-c86d3",
+    "storage_bucket": "rakipbul-c86d3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:125996850771:android:ef8dc2ac4c98df3f6e70a6",
+        "android_client_info": {
+          "package_name": "com.example.rakipbul"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu1XF0p9X04m_uXBpSlMCf-diGo2SIVxM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
