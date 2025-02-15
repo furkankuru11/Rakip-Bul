@@ -162,17 +162,17 @@ class _AnaSayfaState extends State<AnaSayfa> with WidgetsBindingObserver {
             backgroundColor: Colors.white,
             elevation: 20,
             items: [
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.date_range_outlined),
                 activeIcon: Icon(Icons.date_range),
                 label: 'Takvim',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.map_outlined),
                 activeIcon: Icon(Icons.map),
                 label: 'Harita',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.home_outlined),
                 activeIcon: Icon(Icons.home),
                 label: 'Ana Sayfa',

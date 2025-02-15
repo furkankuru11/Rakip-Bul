@@ -50,6 +50,7 @@ dependencies:
   table_calendar: ^3.0.9
   rxdart: ^0.27.7
   geolocator: ^13.0.2
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:

@@ -26,7 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadUserData();
     _updateFCMToken();
-    _checkTodayMatch();
   }
 
   Future<void> _loadUserData() async {
@@ -107,12 +106,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _checkTodayMatch() async {
+  Future<int> _checkTodayMatch() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final deviceId = prefs.getString('device_id');
 
-      if (deviceId == null) return;
+      if (deviceId == null) return 0;
 
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
@@ -135,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         }
+        return 1;
       } else {
         // Bugün maç yoksa maç oluşturma tab'ına yönlendir
         if (mounted) {
@@ -145,6 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         }
+        return 0;
       }
     } catch (e) {
       print('Maç kontrolü hatası: $e');
@@ -156,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       }
+      return 0;
     }
   }
 
@@ -398,7 +400,17 @@ class _HomeScreenState extends State<HomeScreen> {
             );
             break;
           case 'Maç Oluştur':
-            await _checkTodayMatch();
+            final hasMatch = await _checkTodayMatch();
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreateMatchScreen(
+                    initialTab: hasMatch == 1 ? 1 : 0,
+                  ),
+                ),
+              );
+            }
             break;
         }
       },

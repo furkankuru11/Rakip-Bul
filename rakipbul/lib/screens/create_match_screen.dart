@@ -115,25 +115,7 @@ class _CreateMatchScreenState extends State<CreateMatchScreen>
       if (mounted) {
         setState(() {
           _hasMatchToday = matchQuery.docs.isNotEmpty;
-          if (_hasMatchToday && matchQuery.docs.isNotEmpty) {
-            final todayMatch = matchQuery.docs.first;
-            final matchData = todayMatch.data();
-            _userMatches.insert(0, {
-              ...matchData,
-              'id': todayMatch.id,
-              'date': matchData['date'],
-              'time': matchData['time'],
-              'players':
-                  List<Map<String, dynamic>>.from(matchData['players'] ?? []),
-            });
-          }
         });
-      }
-
-      // Debug için
-      print('Bugün maç var mı: $_hasMatchToday');
-      if (_hasMatchToday) {
-        print('Bugünkü maç: ${_userMatches.first}');
       }
     } catch (e) {
       print('Maç kontrolü hatası: $e');
@@ -646,6 +628,7 @@ class _CreateMatchScreenState extends State<CreateMatchScreen>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -729,77 +712,209 @@ class _CreateMatchScreenState extends State<CreateMatchScreen>
     final matchDate = DateTime.parse(match['date']);
     final players = List<Map<String, dynamic>>.from(match['players']);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    return Dismissible(
+      key: Key(match['id']),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(
+          color: Colors.red.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          Icons.delete_outline,
+          color: Colors.red.shade700,
+          size: 28,
+        ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.sports_soccer, color: Colors.green.shade700),
-                const SizedBox(width: 8),
-                Text(
-                  match['fieldName'],
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.location_on, size: 20, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                Text(
-                  '${match['city']}, ${match['district']}',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 20, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                Text(
-                  '${matchDate.day}/${matchDate.month}/${matchDate.year} - ${match['time']}',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
-              ],
-            ),
-            if (players.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'Oyuncular',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+      confirmDismiss: (direction) async {
+        return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Maçı Sil'),
+            content: const Text('Bu maçı silmek istediğinizden emin misiniz?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('İptal'),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: players.map((player) {
-                  return Chip(
-                    label: Text(player['name']),
-                    backgroundColor: Colors.green.shade50,
-                    side: BorderSide(color: Colors.green.shade200),
-                  );
-                }).toList(),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  'Sil',
+                  style: TextStyle(color: Colors.red.shade700),
+                ),
               ),
             ],
-          ],
+          ),
+        );
+      },
+      onDismissed: (direction) async {
+        try {
+          // Önce Firestore'dan maçı sil
+          await FirebaseFirestore.instance
+              .collection('matches')
+              .doc(match['id'])
+              .delete();
+
+          // Kullanıcıların chats koleksiyonundan da sil
+          for (var player in players) {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(player['userId'])
+                .collection('matches')
+                .doc(match['id'])
+                .delete();
+          }
+
+          // Local state'i güncelle
+          setState(() {
+            _userMatches.removeWhere((m) => m['id'] == match['id']);
+            if (_hasMatchToday) {
+              _checkTodayMatch(); // Bugünkü maç durumunu güncelle
+            }
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Maç başarıyla silindi'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          print('Maç silme hatası: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Maç silinirken hata oluştu: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+      child: Card(
+        elevation: 2,
+        margin: const EdgeInsets.only(bottom: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Başlık Bölümü
+              Row(
+                children: [
+                  Container(
+                    child: Icon(Icons.sports_soccer,
+                        size: 24, color: Colors.green.shade800),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      match['fieldName'],
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Bilgi Bölümü
+              _buildInfoRow(
+                icon: Icons.location_on,
+                text: '${match['city']}, ${match['district']}',
+              ),
+              const SizedBox(height: 10),
+              _buildInfoRow(
+                icon: Icons.access_time,
+                text: '${_formatDate(matchDate)} - ${match['time']}',
+              ),
+
+              // Oyuncular Bölümü
+              if (players.isNotEmpty) ...[
+                const Divider(height: 32, thickness: 1),
+                const Text(
+                  'KATILIMCILAR',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.grey,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: players.map((player) {
+                    return Chip(
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      label: Text(
+                        player['name'],
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.green.shade800,
+                        ),
+                      ),
+                      backgroundColor: Colors.green.shade50,
+                      side: BorderSide(color: Colors.green.shade100),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // Yardımcı Metotlar
+  Widget _buildInfoRow({required IconData icon, required String text}) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Colors.grey.shade500),
+        const SizedBox(width: 12),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade700,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final days = [
+      'Pazartesi',
+      'Salı',
+      'Çarşamba',
+      'Perşembe',
+      'Cuma',
+      'Cumartesi',
+      'Pazar'
+    ];
+    final formattedDate = '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year} - ${days[date.weekday - 1]}';
+    return formattedDate;
   }
 
   Widget _buildTodayMatchCard() {
