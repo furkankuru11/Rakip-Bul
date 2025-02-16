@@ -4,14 +4,14 @@
   ],
   "cleanCommandsComponents": [
     [
-      "C:\\Users\\furka\\AppData\\Local\\Android\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "C:\\Users\\furka\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
       "-C",
       "C:\\Users\\furka\\Belgeler\\GitHub\\Rakip-Bul\\rakipbul\\android\\app\\.cxx\\Debug\\1ig1l5j2\\x86",
       "clean"
     ]
   ],
   "buildTargetsCommandComponents": [
-    "C:\\Users\\furka\\AppData\\Local\\Android\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "C:\\Users\\furka\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
     "-C",
     "C:\\Users\\furka\\Belgeler\\GitHub\\Rakip-Bul\\rakipbul\\android\\app\\.cxx\\Debug\\1ig1l5j2\\x86",
     "{LIST_OF_TARGETS_TO_BUILD}"
