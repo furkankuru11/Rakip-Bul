@@ -4,14 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rakipbul/screens/anasayfa.dart';
 import 'screens/registration_steps/step1_name.dart';
 import 'firebase_options.dart';
-import 'screens/registration_steps/step5_height_weight.dart';
-import 'services/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:io' show Platform;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import 'services/chat_service.dart';
-import 'package:flutter/services.dart';
 
 void main() async {
   print('Uygulama başlatılıyor...');
