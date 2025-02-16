@@ -8,14 +8,16 @@ import 'package:rakipbul/screens/group_members_screen.dart';
 class ChatScreen extends StatefulWidget {
   final String friendId;
   final String friendName;
+  final String? friendImage;
   final bool isGroup;
 
   const ChatScreen({
-    super.key,
+    Key? key,
     required this.friendId,
     required this.friendName,
+    this.friendImage,
     required this.isGroup,
-  });
+  }) : super(key: key);
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -65,7 +67,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom(animate: false);
       });
     }
-    await _chatService.markMessagesAsRead(widget.friendId);
   }
 
   void _handleNewMessage(Map<String, dynamic> message) {
@@ -78,10 +79,6 @@ class _ChatScreenState extends State<ChatScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom(animate: true);
       });
-
-      if (message['senderId'] == widget.friendId) {
-        _chatService.markMessagesAsRead(widget.friendId);
-      }
     }
   }
 

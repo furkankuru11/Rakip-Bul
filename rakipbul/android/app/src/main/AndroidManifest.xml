@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="rakipbul"
         android:name="${applicationName}"
@@ -47,7 +49,7 @@
         <!-- Default notification icon ve renk -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="friend_requests"/>
+            android:value="messages"/>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher"/>

@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io' show Platform;
 import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 
 class ChatService {
   static final ChatService _instance = ChatService._internal();
@@ -75,9 +77,7 @@ class ChatService {
 
   Future<void> initialize() async {
     try {
-      if (_prefs == null) {
-        _prefs = await SharedPreferences.getInstance();
-      }
+      _prefs ??= await SharedPreferences.getInstance();
 
       currentUserId = _prefs?.getString('device_id');
       print('👤 Current User ID: $currentUserId');
@@ -165,12 +165,19 @@ class ChatService {
 
   // Belirli bir sohbetin mesajlarını getir
   Future<List<Map<String, dynamic>>> getMessages(String chatId) async {
-    final messagesJson = _prefs?.getString(chatId);
-    if (messagesJson != null) {
-      final List<dynamic> decoded = jsonDecode(messagesJson);
-      return decoded.cast<Map<String, dynamic>>();
+    try {
+      final messagesJson = _prefs?.getString(chatId);
+      if (messagesJson != null) {
+        final List<dynamic> decoded = jsonDecode(messagesJson);
+        return List<Map<String, dynamic>>.from(decoded)
+          ..sort((a, b) => DateTime.parse(b['timestamp'])
+              .compareTo(DateTime.parse(a['timestamp'])));
+      }
+      return [];
+    } catch (e) {
+      print('Mesajlar getirilirken hata: $e');
+      return [];
     }
-    return [];
   }
 
   // İki kullanıcı arasındaki sohbet ID'sini oluştur
@@ -187,38 +194,73 @@ class ChatService {
   }
 
   // Mesaj gönderme
-  Future<void> sendMessage(String chatId, String message,
-      {bool isGroup = false}) async {
+  Future<void> sendMessage(String senderId, String receiverId, String message) async {
     try {
-      final currentUserId = await _getCurrentUserId();
-      if (currentUserId == null) return;
+      if (!socket.connected) {
+        print('❌ Socket bağlı değil, mesaj gönderilemedi');
+        return;
+      }
 
       final messageData = {
-        'messageId': const Uuid().v4(),
+        'senderId': senderId,
+        'receiverId': receiverId,
         'message': message,
-        'senderId': currentUserId,
         'timestamp': DateTime.now().toIso8601String(),
-        'type': 'text',
-        'isGroup': isGroup,
-        'chatId': chatId,
       };
 
-      if (isGroup) {
-        // Grup mesajını socket üzerinden gönder
-        if (socket.connected) {
-          socket.emit('group_message', messageData);
+      // WebSocket üzerinden mesajı gönder
+      socket.emit('send_message', messageData);
 
-          // Stream'e mesajı gönder
-          _messageStreamController.add(messageData);
-        } else {
-          print('Socket bağlantısı yok, mesaj kaydediliyor...');
-          await _saveMessageToLocal(messageData);
-        }
-      } else {
-        // Normal mesaj gönderme kodu...
+      // Bildirim için alıcının FCM tokenını al
+      DocumentSnapshot receiverDoc = await _firestore.collection('users').doc(receiverId).get();
+      String? receiverToken = receiverDoc.get('fcmToken');
+      String senderName = (await _firestore.collection('users').doc(senderId).get()).get('name');
+
+      // Bildirim gönder
+      if (receiverToken != null) {
+        await _sendNotification(
+          token: receiverToken,
+          title: senderName,
+          body: message,
+          data: {
+            'type': 'message',
+            'senderId': senderId,
+            'senderName': senderName,
+          },
+        );
       }
     } catch (e) {
-      print('Mesaj gönderme hatası: $e');
+      print('Mesaj gönderilirken hata: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _sendNotification({
+    required String token,
+    required String title,
+    required String body,
+    required Map<String, String> data,
+  }) async {
+    try {
+      await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'key=BURAYA_SERVER_KEY_GELECEK', // Firebase Console'dan aldığınız key
+        },
+        body: json.encode({
+          'notification': {
+            'title': title,
+            'body': body,
+            'sound': 'default',
+          },
+          'data': data,
+          'priority': 'high',
+          'to': token,
+        }),
+      );
+    } catch (e) {
+      print('Bildirim gönderilirken hata: $e');
     }
   }
 
@@ -332,7 +374,19 @@ class ChatService {
         }
       });
 
-      socket.on('receive_message', _handleReceiveMessage);
+      socket.on('receive_message', (data) async {
+        print('📩 Yeni mesaj alındı: $data');
+        
+        // Mesajı locale kaydet
+        await _saveMessageToLocal(data);
+
+        // Stream'e yeni mesajı gönder
+        _messageStreamController.add(data);
+        
+        if (onMessageReceived != null) {
+          onMessageReceived!(data);
+        }
+      });
     }
 
     socket.on('group_message', (data) async {
@@ -348,81 +402,72 @@ class ChatService {
     });
   }
 
-  void _handleReceiveMessage(dynamic data) async {
-    print('📩 Yeni mesaj alındı: $data');
-    await _saveMessageToLocal(data);
-    // Stream'e yeni mesajı gönder
-    _safeEmit(_messageStreamController, data);
-    if (onMessageReceived != null) {
-      onMessageReceived!(data);
-    }
-  }
-
   Future<String?> _getCurrentUserId() async {
     if (currentUserId != null) return currentUserId;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('device_id');
   }
 
+  // Tüm sohbetleri getir
   Future<List<Map<String, dynamic>>> getAllChats() async {
-    if (currentUserId == null) return [];
-
     try {
-      final List<Map<String, dynamic>> chatPreviews = [];
-      final allKeys = _prefs?.getKeys() ?? <String>{};
+      if (currentUserId == null) return [];
 
-      // Sadece mevcut kullanıcının sohbetlerini filtrele
-      final userChatKeys = allKeys.where(
-          (key) => key.startsWith('chat_') && key.contains(currentUserId!));
+      // Kullanıcının dahil olduğu tüm sohbetleri al
+      final querySnapshot = await _firestore
+          .collection('chats')
+          .where('members', arrayContains: currentUserId)
+          .orderBy('lastMessage.timestamp', descending: true)
+          .get();
 
-      for (var key in userChatKeys) {
-        final messages = await getMessages(key);
-        if (messages.isNotEmpty) {
-          // Son mesajı bul
-          final lastMessage = messages.reduce((a, b) =>
-              DateTime.parse(a['timestamp'])
-                      .isAfter(DateTime.parse(b['timestamp']))
-                  ? a
-                  : b);
+      List<Map<String, dynamic>> chats = [];
 
-          // Karşı tarafın ID'sini bul
-          final friendId = lastMessage['senderId'] == currentUserId
-              ? lastMessage['receiverId']
-              : lastMessage['senderId'];
+      for (var doc in querySnapshot.docs) {
+        final chatData = doc.data();
+        final members = List<String>.from(chatData['members'] ?? []);
+        
+        // Karşı tarafın ID'sini bul
+        final otherUserId = members.firstWhere(
+          (id) => id != currentUserId,
+          orElse: () => '',
+        );
 
-          // Karşı tarafın bilgilerini Firestore'dan al
-          final friendDoc = await _firestore
-              .collection('users')
-              .where('deviceId', isEqualTo: friendId)
-              .get();
+        if (otherUserId.isEmpty) continue;
 
-          if (friendDoc.docs.isNotEmpty) {
-            final friendData = friendDoc.docs.first.data();
+        // Karşı tarafın bilgilerini al
+        final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
+        if (!otherUserDoc.exists) continue;
 
-            // Okunmamış mesaj sayısını hesapla
-            final unreadCount = messages
-                .where((m) =>
-                    m['senderId'] != currentUserId && m['status'] != 'read')
-                .length;
+        final otherUserData = otherUserDoc.data() ?? {};
 
-            chatPreviews.add({
-              'friendId': friendId,
-              'friendName': friendData['name'] ?? 'İsimsiz Kullanıcı',
-              'profileImage': friendData['profileImage'],
-              'lastMessage': lastMessage,
-              'unreadCount': unreadCount,
-            });
-          }
-        }
+        chats.add({
+          'chatId': doc.id,
+          'lastMessage': chatData['lastMessage'] != null ? {
+            'message': chatData['lastMessage']?['message'] ?? '',
+            'senderId': chatData['lastMessage']?['senderId'] ?? '',
+            'timestamp': chatData['lastMessage']?['timestamp'] != null 
+                ? (chatData['lastMessage']?['timestamp'] as Timestamp).toDate().toIso8601String()
+                : DateTime.now().toIso8601String(),
+          } : {
+            'message': '',
+            'senderId': '',
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+          'type': chatData['type'] ?? 'private',
+          'otherUser': {
+            'id': otherUserId,
+            'name': otherUserData['name'] ?? '',
+            'profileImage': otherUserData['profileImage'],
+          },
+          'unreadCount': chatData['unreadCount'] is Map 
+              ? ((chatData['unreadCount'] as Map<String, dynamic>)[currentUserId] ?? 0)
+              : (chatData['unreadCount'] ?? 0),
+        });
       }
 
-      // Son mesaja göre sırala
-      chatPreviews.sort((a, b) => DateTime.parse(b['lastMessage']['timestamp'])
-          .compareTo(DateTime.parse(a['lastMessage']['timestamp'])));
-
-      return chatPreviews;
+      return chats;
     } catch (e) {
-      print('Sohbetler yüklenirken hata: $e');
+      print('Sohbetler getirilirken hata: $e');
       return [];
     }
   }
@@ -446,55 +491,6 @@ class ChatService {
   void _updateConnectionStatus(bool status) {
     isConnected = status;
     _safeEmit(_connectionController, status);
-  }
-
-  // Mesajları okundu olarak işaretle
-  Future<void> markMessagesAsRead(String friendId) async {
-    if (currentUserId == null) return;
-
-    final chatId = _getChatId(currentUserId!, friendId);
-    final messages = await getMessages(chatId);
-
-    bool hasChanges = false;
-
-    // Karşı taraftan gelen okunmamış mesajları işaretle
-    for (var message in messages) {
-      if (message['senderId'] == friendId && message['status'] != 'read') {
-        message['status'] = 'read';
-        hasChanges = true;
-      }
-    }
-
-    // Değişiklik varsa kaydet
-    if (hasChanges) {
-      await _prefs?.setString(chatId, jsonEncode(messages));
-    }
-  }
-
-  // Okunmamış mesaj sayısını getir
-  Future<int> getUnreadMessagesCount() async {
-    if (currentUserId == null) return 0;
-
-    try {
-      final allChats = await getAllChats();
-      int totalUnread = 0;
-
-      for (var chat in allChats) {
-        totalUnread += chat['unreadCount'] as int;
-      }
-
-      return totalUnread;
-    } catch (e) {
-      print('Okunmamış mesaj sayısı hesaplanırken hata: $e');
-      return 0;
-    }
-  }
-
-  // Mesaj geldiğinde dinleyicileri bilgilendir
-  Stream<int> get unreadMessagesStream {
-    return Stream.periodic(const Duration(seconds: 1), (_) async {
-      return await getUnreadMessagesCount();
-    }).asyncMap((event) async => await event);
   }
 
   // Son görülme zamanını getir
@@ -613,5 +609,62 @@ class ChatService {
       if (userId == currentUserId) return true;
       return statuses[userId] == true;
     }).distinct();
+  }
+
+  // Sohbet listesi stream'i
+  Stream<List<Map<String, dynamic>>> get chatsStream {
+    if (currentUserId == null) return Stream.value([]);
+
+    return _firestore
+        .collection('chats')
+        .where('members', arrayContains: currentUserId)
+        .orderBy('lastMessage.timestamp', descending: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      List<Map<String, dynamic>> chats = [];
+      
+      for (var doc in snapshot.docs) {
+        final chatData = doc.data();
+        final members = List<String>.from(chatData['members'] ?? []);
+        
+        final otherUserId = members.firstWhere(
+          (id) => id != currentUserId,
+          orElse: () => '',
+        );
+
+        if (otherUserId.isEmpty) continue;
+
+        final otherUserDoc = await _firestore.collection('users').doc(otherUserId).get();
+        if (!otherUserDoc.exists) continue;
+
+        final otherUserData = otherUserDoc.data() ?? {};
+
+        chats.add({
+          'chatId': doc.id,
+          'lastMessage': chatData['lastMessage'] != null ? {
+            'message': chatData['lastMessage']?['message'] ?? '',
+            'senderId': chatData['lastMessage']?['senderId'] ?? '',
+            'timestamp': chatData['lastMessage']?['timestamp'] != null 
+                ? (chatData['lastMessage']?['timestamp'] as Timestamp).toDate().toIso8601String()
+                : DateTime.now().toIso8601String(),
+          } : {
+            'message': '',
+            'senderId': '',
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+          'type': chatData['type'] ?? 'private',
+          'otherUser': {
+            'id': otherUserId,
+            'name': otherUserData['name'] ?? '',
+            'profileImage': otherUserData['profileImage'],
+          },
+          'unreadCount': chatData['unreadCount'] is Map 
+              ? ((chatData['unreadCount'] as Map<String, dynamic>)[currentUserId] ?? 0)
+              : (chatData['unreadCount'] ?? 0),
+        });
+      }
+
+      return chats;
+    });
   }
 }

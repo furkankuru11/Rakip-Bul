@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:numberpicker/numberpicker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'step3_position.dart';
 
 class HeightWeightStep extends StatefulWidget {
