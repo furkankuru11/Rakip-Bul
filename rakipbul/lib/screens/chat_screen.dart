@@ -261,21 +261,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageList() {
-    if (widget.isGroup) {
-      return _buildGroupMessages();
-    } else {
-      return _buildPrivateMessages();
-    }
-  }
-
-  Widget _buildGroupMessages() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('messages')
-          .doc(widget.friendId)
-          .collection('chat_messages')
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Stream.periodic(const Duration(seconds: 1)).asyncMap((_) async {
+        final messages = await _chatService.getChatMessages(widget.friendId);
+        return messages;
+      }),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Hata: ${snapshot.error}'));
@@ -285,69 +275,34 @@ class _ChatScreenState extends State<ChatScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final messages = snapshot.data!.docs;
+        final messages = snapshot.data!;
+
+        if (messages.isEmpty) {
+          return Center(
+            child: Text(
+              'Henüz mesaj yok',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          );
+        }
+
         return ListView.builder(
-          reverse: true,
+          controller: _scrollController,
           itemCount: messages.length,
           itemBuilder: (context, index) {
-            final message = messages[index].data() as Map<String, dynamic>;
+            final message = messages[index];
             final isMe = message['senderId'] == _chatService.currentUserId;
             return _buildMessage(message, isMe);
           },
         );
       },
     );
-  }
-
-  Widget _buildPrivateMessages() {
-    final chatId = _getChatId(_chatService.currentUserId!, widget.friendId);
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('messages')
-          .doc(chatId)
-          .collection('chat_messages')
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Hata: ${snapshot.error}'));
-        }
-
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final messages = snapshot.data!.docs;
-        return ListView.builder(
-          reverse: true,
-          itemCount: messages.length,
-          itemBuilder: (context, index) {
-            final message = messages[index].data() as Map<String, dynamic>;
-            final isMe = message['senderId'] == _chatService.currentUserId;
-            return _buildMessage(message, isMe);
-          },
-        );
-      },
-    );
-  }
-
-  // İki kullanıcı arasındaki sohbet ID'sini oluştur
-  String _getChatId(String userId1, String userId2) {
-    final sortedIds = [userId1, userId2]..sort();
-    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
   }
 
   Widget _buildMessage(Map<String, dynamic> message, bool isMe) {
-    // Timestamp kontrolü ve dönüşümü
     String timeStr = '';
     if (message['timestamp'] != null) {
-      if (message['timestamp'] is Timestamp) {
-        final timestamp = message['timestamp'] as Timestamp;
-        timeStr = _formatTime(timestamp.toDate());
-      } else if (message['timestamp'] is String) {
-        timeStr = _formatTime(DateTime.parse(message['timestamp']));
-      }
+      timeStr = _formatTime(DateTime.parse(message['timestamp']));
     }
 
     return Container(
@@ -356,17 +311,7 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisAlignment:
             isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isMe) ...[
-            const SizedBox(width: 24),
-            if (widget.isGroup)
-              Text(
-                message['senderName'] ?? 'Bilinmeyen',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-          ],
+          if (!isMe) const SizedBox(width: 24),
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(
@@ -401,19 +346,14 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        timeStr,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isMe
-                              ? Colors.white.withOpacity(0.8)
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isMe
+                          ? Colors.white.withOpacity(0.8)
+                          : Colors.grey.shade600,
+                    ),
                   ),
                 ],
               ),
@@ -439,83 +379,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || !mounted) return;
 
     try {
-      final timestamp = FieldValue.serverTimestamp();
-      final messageData = {
-        'message': text,
-        'senderId': _chatService.currentUserId,
-        'timestamp': timestamp,
-        'type': 'text'
-      };
-
-      if (widget.isGroup) {
-        // Grup mesajı gönderme
-        await FirebaseFirestore.instance
-            .collection('messages')
-            .doc(widget.friendId)
-            .collection('chat_messages')
-            .add(messageData);
-
-        await FirebaseFirestore.instance
-            .collection('chats')
-            .doc(widget.friendId)
-            .update({
-          'lastMessage': messageData,
-        });
-
-        // Grup üyelerine bildirim gönder
-        final groupDoc = await FirebaseFirestore.instance
-            .collection('chats')
-            .doc(widget.friendId)
-            .get();
-
-        if (groupDoc.exists) {
-          final members = List<String>.from(groupDoc.data()?['members'] ?? []);
-          for (var memberId in members) {
-            if (memberId != _chatService.currentUserId) {
-              // Her üyenin unreadCount'unu artır
-              await FirebaseFirestore.instance
-                  .collection('chats')
-                  .doc(widget.friendId)
-                  .update({
-                'unreadCount': FieldValue.increment(1),
-              });
-            }
-          }
-        }
-      } else {
-        // Özel mesaj gönderme
-        final chatId = _getChatId(_chatService.currentUserId!, widget.friendId);
-
-        await FirebaseFirestore.instance
-            .collection('messages')
-            .doc(chatId)
-            .collection('chat_messages')
-            .add(messageData);
-
-        await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
-          'members': [_chatService.currentUserId, widget.friendId],
-          'type': 'private',
-          'lastMessage': messageData,
-        }, SetOptions(merge: true));
-
-        // Karşı tarafa bildirim gönder
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.friendId)
-            .get();
-
-        if (userDoc.exists) {
-          await FirebaseFirestore.instance
-              .collection('chats')
-              .doc(chatId)
-              .update({
-            'unreadCount': FieldValue.increment(1),
-          });
-        }
-      }
+      // WebSocket ile mesaj gönder
+      await _chatService.sendMessage(widget.friendId, text);
 
       _messageController.clear();
       _scrollToBottom();

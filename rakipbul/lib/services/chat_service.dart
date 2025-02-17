@@ -187,38 +187,34 @@ class ChatService {
   }
 
   // Mesaj gönderme
-  Future<void> sendMessage(String chatId, String message,
-      {bool isGroup = false}) async {
+  Future<void> sendMessage(String receiverId, String message) async {
     try {
-      final currentUserId = await _getCurrentUserId();
       if (currentUserId == null) return;
 
       final messageData = {
         'messageId': const Uuid().v4(),
         'message': message,
         'senderId': currentUserId,
+        'receiverId': receiverId,
         'timestamp': DateTime.now().toIso8601String(),
-        'type': 'text',
-        'isGroup': isGroup,
-        'chatId': chatId,
+        'status': 'sent'
       };
 
-      if (isGroup) {
-        // Grup mesajını socket üzerinden gönder
-        if (socket.connected) {
-          socket.emit('group_message', messageData);
+      // Locale kaydet
+      await _saveMessageToLocal(messageData);
 
-          // Stream'e mesajı gönder
-          _messageStreamController.add(messageData);
-        } else {
-          print('Socket bağlantısı yok, mesaj kaydediliyor...');
-          await _saveMessageToLocal(messageData);
-        }
+      // WebSocket ile gönder
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('message', messageData);
+        print('📤 Mesaj gönderildi: $messageData');
+
+        // Stream'e yeni mesajı ekle
+        _messageStreamController.add(messageData);
       } else {
-        // Normal mesaj gönderme kodu...
+        print('❌ WebSocket bağlantısı yok, sadece locale kaydedildi');
       }
     } catch (e) {
-      print('Mesaj gönderme hatası: $e');
+      print('❌ Mesaj gönderme hatası: $e');
     }
   }
 
