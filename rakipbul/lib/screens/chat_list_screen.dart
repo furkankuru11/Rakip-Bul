@@ -147,7 +147,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         ),
         body: TabBarView(
           children: [
-            _buildChatList(_chats),
+            _buildChatList(),
             _buildNewChat(),
             _buildCreateGroup(),
             _buildGroupList(),
@@ -613,89 +613,211 @@ class _ChatListScreenState extends State<ChatListScreen>
     }
   }
 
-  Widget _buildChatList(List<Map<String, dynamic>> chats) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _chatService.chatsStream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Hata: ${snapshot.error}'));
-        }
+  Widget _buildChatList() {
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: _loadChats,
+            child: _chats.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.6,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.message_outlined,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Henüz mesajınız yok',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    itemCount: _chats.length,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemBuilder: (context, index) {
+                      final chat = _chats[index];
+                      final lastMessage = chat['lastMessage'];
+                      final time =
+                          DateTime.parse(lastMessage['timestamp']).toLocal();
+                      final timeStr = _formatTime(time);
+                      final isOnline =
+                          _onlineStatuses[chat['friendId']] ?? false;
 
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final chats = snapshot.data!;
-
-        if (chats.isEmpty) {
-          return const Center(
-            child: Text('Henüz mesajınız yok'),
-          );
-        }
-
-        return ListView.builder(
-          itemCount: chats.length,
-          itemBuilder: (context, index) {
-            final chat = chats[index];
-            final otherUser = chat['otherUser'];
-            final lastMessage = chat['lastMessage'];
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.green.shade100,
-                child: Text(
-                  otherUser['name']?.substring(0, 1).toUpperCase() ?? '?',
-                  style: TextStyle(color: Colors.green.shade700),
-                ),
-              ),
-              title: Text(otherUser['name'] ?? 'İsimsiz Kullanıcı'),
-              subtitle: Text(
-                lastMessage['message'] ?? '',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Text(
-                _formatTimestamp(lastMessage['timestamp']),
-                style: const TextStyle(fontSize: 12),
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatScreen(
-                      friendId: otherUser['id'] ?? '',
-                      friendName: otherUser['name'] ?? 'İsimsiz Kullanıcı',
-                      friendImage: otherUser['profileImage'],
-                      isGroup: chat['type'] == 'group',
-                    ),
+                      return InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(
+                                friendId: chat['friendId'],
+                                friendName: chat['friendName'],
+                                isGroup: chat['type'] == 'group',
+                              ),
+                            ),
+                          ).then((_) {
+                            if (_mounted) {
+                              _loadChats();
+                            }
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundColor: Colors.green.shade50,
+                                    child: Text(
+                                      chat['friendName'][0].toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                  StreamBuilder<bool>(
+                                    stream: _chatService
+                                        .userStatusStream(chat['friendId']),
+                                    initialData: _chatService
+                                        .isUserOnline(chat['friendId']),
+                                    builder: (context, snapshot) {
+                                      final isOnline = snapshot.data ?? false;
+                                      if (!isOnline) return const SizedBox();
+                                      return Positioned(
+                                        right: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          width: 14,
+                                          height: 14,
+                                          decoration: BoxDecoration(
+                                            color: Colors.green,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          chat['friendName'],
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        Text(
+                                          timeStr,
+                                          style: TextStyle(
+                                            color: chat['unreadCount'] > 0
+                                                ? Colors.green.shade700
+                                                : Colors.grey.shade500,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            lastMessage['message'],
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: chat['unreadCount'] > 0
+                                                  ? Colors.black87
+                                                  : Colors.grey.shade600,
+                                              fontWeight:
+                                                  chat['unreadCount'] > 0
+                                                      ? FontWeight.w500
+                                                      : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                        if (chat['unreadCount'] > 0) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade500,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              chat['unreadCount'].toString(),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      isOnline
+                                          ? 'çevrimiçi'
+                                          : _chatService
+                                              .getLastSeen(chat['friendId']),
+                                      style: TextStyle(
+                                        color: isOnline
+                                            ? Colors.green
+                                            : Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  String _formatTimestamp(String? timestamp) {
-    if (timestamp == null) return '';
-    
-    try {
-      final date = DateTime.parse(timestamp);
-      final now = DateTime.now();
-      final difference = now.difference(date);
-
-      if (difference.inDays == 0) {
-        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      } else if (difference.inDays == 1) {
-        return 'Dün';
-      } else {
-        return '${date.day}/${date.month}';
-      }
-    } catch (e) {
-      return '';
-    }
+          );
   }
 
   String _formatTime(DateTime time) {

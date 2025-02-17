@@ -41,7 +41,7 @@ dependencies:
   image_picker: ^1.1.2
   firebase_storage: ^12.4.0
   firebase_database: ^11.3.0
-  firebase_messaging: ^15.2.2
+  firebase_messaging: ^15.2.0
   flutter_local_notifications: ^18.0.1
   shared_preferences: ^2.2.2
   uuid: ^4.3.3
@@ -51,8 +51,6 @@ dependencies:
   rxdart: ^0.27.7
   geolocator: ^13.0.2
   intl: ^0.18.1
-  googleapis: ^13.2.0 
-  googleapis_auth: ^1.6.0
 
 dev_dependencies:
   flutter_test:

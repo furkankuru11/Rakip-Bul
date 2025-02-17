@@ -4,18 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rakipbul/screens/anasayfa.dart';
 import 'screens/registration_steps/step1_name.dart';
 import 'firebase_options.dart';
+import 'screens/registration_steps/step5_height_weight.dart';
+import 'services/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:io' show Platform;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'services/chat_service.dart';
-import 'services/firebase_service.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'dart:convert' show json;
-import 'screens/chat_screen.dart';  // Chat ekranı import'u
-
-// Global değişken olarak tanımla
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+import 'package:flutter/services.dart';
 
 void main() async {
   print('Uygulama başlatılıyor...');
@@ -31,151 +27,25 @@ void main() async {
     return; // Firebase başlatılamazsa uygulamayı başlatma
   }
 
-  // Bildirimleri başlat
-  await _initNotifications();
-  
-  // Bildirim izinlerini iste
-  await _requestNotificationPermissions();
-  
-  // Arka plan mesaj işleyicisini ayarla
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  
-  // Ön plan mesaj işleyicisini ayarla
-  await _setupForegroundMessaging();
+  // Notification işlemlerini try-catch içine alalım
+  try {
+    if (Platform.isIOS) {
+      print('iOS için bildirim izinleri isteniyor...');
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: true, // Geçici izin ekledik
+      );
+      print('Bildirim izin durumu: ${settings.authorizationStatus}');
+    }
+  } catch (e) {
+    print('Bildirim ayarları yapılırken hata: $e');
+    // Bildirim hatası uygulamayı engellemeyecek
+  }
 
   print('Uygulama arayüzü başlatılıyor...');
   runApp(const HaliSahaApp());
-}
-
-// Bildirimleri başlatma
-Future<void> _initNotifications() async {
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-      
-  const DarwinInitializationSettings initializationSettingsIOS =
-      DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-  );
-
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-    iOS: initializationSettingsIOS,
-  );
-
-  // Bildirime tıklama işleyicisi
-  await flutterLocalNotificationsPlugin.initialize(
-    initializationSettings,
-    onDidReceiveNotificationResponse: (details) {
-      if (details.payload != null) {
-        final payloadData = json.decode(details.payload!);
-        if (payloadData['type'] == 'message') {
-          // Global navigator key kullanarak yönlendirme
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                friendId: payloadData['senderId'],
-                friendName: payloadData['senderName'],
-                friendImage: payloadData['senderImage'],
-                isGroup: false,
-                
-                  
-              ),
-            ),
-          );
-        }
-      }
-    },
-  );
-}
-
-// İzinleri isteme
-Future<void> _requestNotificationPermissions() async {
-  await FirebaseMessaging.instance.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-}
-
-// Arka plan mesaj işleyicisi
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print('Arka plan bildirimi alındı: ${message.notification?.title}');
-  _showNotification(message);
-}
-
-// Ön plan mesaj ayarları
-Future<void> _setupForegroundMessaging() async {
-  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('Ön plan bildirimi alındı: ${message.notification?.title}');
-    _showNotification(message);
-  });
-}
-
-// Bildirimi gösterme
-Future<void> _showNotification(RemoteMessage message) async {
-  if (message.data['type'] == 'message') {
-    const AndroidNotificationDetails messageChannelSpecifics =
-        AndroidNotificationDetails(
-      'messages',
-      'Mesajlar',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-      enableVibration: true,
-      enableLights: true,
-      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'), // Profil resmi
-      styleInformation: BigTextStyleInformation(''),
-    );
-
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: messageChannelSpecifics);
-
-    // Payload'a tıklama için gerekli bilgileri ekle
-    final payload = json.encode({
-      'type': 'message',
-      'senderId': message.data['senderId'],
-      'senderName': message.notification?.title,
-      'senderImage': message.data['senderImage'],
-    });
-
-    await flutterLocalNotificationsPlugin.show(
-      message.hashCode,
-      message.notification?.title ?? 'Yeni Mesaj',
-      message.notification?.body ?? '',
-      platformChannelSpecifics,
-      payload: payload,
-    );
-  } else {
-    // Diğer bildirimler için mevcut kanal
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'friend_requests',
-      'Arkadaşlık İstekleri',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-
-    await flutterLocalNotificationsPlugin.show(
-      message.hashCode,
-      message.notification?.title ?? 'Yeni Bildirim',
-      message.notification?.body ?? '',
-      platformChannelSpecifics,
-    );
-  }
 }
 
 class HaliSahaApp extends StatefulWidget {
@@ -256,20 +126,17 @@ class _HaliSahaAppState extends State<HaliSahaApp> with WidgetsBindingObserver {
         });
       }
     }
-    FirebaseService.instance.getDeviceToken();
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-    
       debugShowCheckedModeBanner: false,
       title: 'Halı Saha Bul',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      navigatorKey: navigatorKey,
       home: const InitialScreen(),
     );
   }
