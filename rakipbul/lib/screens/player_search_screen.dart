@@ -8,6 +8,7 @@ import 'package:rakipbul/services/chat_service.dart';
 import 'package:rakipbul/screens/other_profile.dart';
 import 'package:geolocator/geolocator.dart';
 
+
 class PlayerSearchScreen extends StatefulWidget {
   const PlayerSearchScreen({super.key});
 
@@ -152,25 +153,42 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
           .where('availability', isNull: false)
           .get();
 
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final availabilities = List<Map<String, dynamic>>.from(data['availability'] ?? []);
+        
+        if (availabilities.isNotEmpty) {
+          // Her müsaitlik için son tarihi hesapla ve Firestore'a kaydet
+          for (var availability in availabilities) {
+            final date = DateTime.parse(availability['date']);
+            final endTime = availability['endTime'].split(':');
+            final endDateTime = DateTime(
+              date.year, date.month, date.day,
+              int.parse(endTime[0]), int.parse(endTime[1]),
+            );
+
+            await _firestore.collection('users').doc(doc.id).update({
+              'availabilityEndTime': endDateTime.toIso8601String(),
+              'availabilityStartTime': DateTime(
+                date.year, date.month, date.day,
+                int.parse(availability['startTime'].split(':')[0]),
+                int.parse(availability['startTime'].split(':')[1]),
+              ).toIso8601String(),
+              'availabilityLocation': {
+                'latitude': availability['latitude'],
+                'longitude': availability['longitude'],
+              },
+              'isAvailable': true,
+            });
+          }
+        }
+      }
+
       // Kullanıcıları müsaitlik zamanlarına göre al
       final seekers = snapshot.docs.map((doc) {
         final data = doc.data();
         data['userId'] = doc.id;
-
-        final availabilityData = List<Map<String, dynamic>>.from(
-          (data['availability'] ?? []).map((item) => {
-                'date': item['date'],
-                'startTime': item['startTime'],
-                'endTime': item['endTime'],
-                'latitude': item['latitude'],
-                'longitude': item['longitude'],
-              }),
-        );
-
-        return UserModel.fromMap({
-          ...data,
-          'availabilities': availabilityData,
-        });
+        return UserModel.fromMap({...data, 'availabilities': data['availability'] ?? []});
       }).toList();
 
       setState(() => matchSeekers = seekers);
@@ -361,7 +379,6 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
                     builder: (context) => ChatScreen(
                       friendId: friend.userId,
                       friendName: friend.name,
-                      isGroup: false,
                     ),
                   ),
                 );
@@ -374,73 +391,40 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
   }
 
   // Maç arayanlar sekmesinin görünümünü güncelle
-  Widget _buildMatchSeekersTab() {
-    if (matchSeekers.isEmpty) {
-      return const Center(
-        child: Text('Müsait oyuncu bulunmuyor'),
-      );
-    }
-
+  Widget _buildMatchSeekersTab(List<UserModel> players) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
           ),
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  'İsim',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
-                  ),
+                child: Text('İsim',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
                 ),
               ),
               Expanded(
-                child: Text(
-                  'Mevki',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
-                  ),
+                child: Text('Mevki',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
                 ),
               ),
               Expanded(
-                child: Text(
-                  'Puan',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
-                  ),
+                child: Text('Puan',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
                 ),
               ),
               Expanded(
-                child: Text(
-                  'Müsaitlik',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
-                  ),
+                child: Text('Müsaitlik',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
                 ),
               ),
               Expanded(
-                child: Text(
-                  'Konum',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
-                  ),
+                child: Text('Konum',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
                 ),
               ),
             ],
@@ -448,95 +432,79 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
         ),
         Expanded(
           child: ListView.builder(
-            itemCount: matchSeekers.length,
+            itemCount: players.length,
             itemBuilder: (context, index) {
-              final user = matchSeekers[index];
-              final hasLocation = user.availabilities
-                  .any((a) => a['latitude'] != null && a['longitude'] != null);
+              final user = players[index];
+              final availabilityLocation = user.availabilityLocation;
+              final hasLocation = availabilityLocation != null && 
+                  availabilityLocation['latitude'] != null && 
+                  availabilityLocation['longitude'] != null;
 
               return InkWell(
-                onTap: () => _showAvailabilityDialog(user),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OtherProfileScreen(
+                        userData: {
+                          ...user.toMap(),
+                          'userId': user.userId,
+                          'availabilityStartTime': user.availabilityStartTime,
+                          'availabilityEndTime': user.availabilityEndTime,
+                          'availabilityLocation': user.availabilityLocation,
+                        },
+                      ),
+                    ),
+                  );
+                },
                 child: Container(
                   decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey.shade200),
-                    ),
+                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              user.name,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              user.position,
-                              style: const TextStyle(
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              user.rating > 0
-                                  ? '★${user.rating.toStringAsFixed(1)}'
-                                  : '-',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.amber.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                _showAvailabilityDialog(user);
-                              },
-                              child: Column(
-                                children: [
-                                  const SizedBox(height: 2),
-                                  Icon(
-                                    Icons.access_time_filled,
-                                    color: user.availabilities.isEmpty
-                                        ? Colors.grey.shade400
-                                        : Colors.green.shade700,
-                                    size: 20,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              hasLocation
-                                  ? '${(user.distance ?? 0) ~/ 1000} km'
-                                  : 'Belirsiz',
-                              style: const TextStyle(
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (user.availabilities.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                      Expanded(
+                        child: Text(
+                          user.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ],
+                      ),
+                      Expanded(
+                        child: Text(
+                          user.position,
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          user.rating > 0 ? '★${user.rating.toStringAsFixed(1)}' : '-',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.amber.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showAvailabilityDetails(context, user),
+                          child: Icon(
+                            Icons.access_time_filled,
+                            color: Colors.green.shade700,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          hasLocation ? '${(user.distance ?? 0).toStringAsFixed(1)} km' : '-',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -706,11 +674,115 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
     );
   }
 
+  void _showAvailabilityDetails(BuildContext context, UserModel user) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.access_time, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${user.name} - Müsaitlik Zamanları',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade100),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_today, size: 18, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      user.availabilityStartTime != null ? 
+                      '${DateTime.parse(user.availabilityStartTime!).hour}:00 - ${DateTime.parse(user.availabilityEndTime!).hour}:00' 
+                      : 'Belirtilmemiş',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Kapat', style: TextStyle(color: Colors.grey.shade700)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatAvailabilities(List<Map<String, dynamic>> availabilities) {
     if (availabilities.isEmpty) return 'Belirtilmedi';
     final availability = availabilities.first;
     final date = DateTime.parse(availability['date']);
     return '${date.day}/${date.month} ${availability['startTime']} - ${availability['endTime']}';
+  }
+
+  Stream<List<UserModel>> _getFilteredPlayersStream() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .where('isSearchingMatch', isEqualTo: true)
+        .where('isAvailable', isEqualTo: true)
+        .where('deviceId', isNotEqualTo: currentUserId)
+        .snapshots()
+        .map((snapshot) {
+          final now = DateTime.now();
+          
+          // Her bir dokümanı kontrol et ve süresi geçenleri temizle
+          snapshot.docs.forEach((doc) async {
+            final data = doc.data();
+            if (data['availabilityEndTime'] != null) {
+              final endTime = DateTime.parse(data['availabilityEndTime']);
+              
+              if (endTime.isBefore(now)) {
+                await _firestore.collection('users').doc(doc.id).update({
+                  'availability': [],
+                  'isSearchingMatch': false,
+                  'isAvailable': false,
+                  'availabilityEndTime': null,
+                  'availabilityStartTime': null,
+                  'availabilityLocation': null,
+                });
+              }
+            }
+          });
+
+          // Sadece aktif müsaitlikleri olan kullanıcıları döndür
+          return snapshot.docs
+              .where((doc) {
+                final data = doc.data();
+                if (data['availabilityEndTime'] == null) return false;
+                
+                final endTime = DateTime.parse(data['availabilityEndTime']);
+                return endTime.isAfter(now);
+              })
+              .map((doc) => UserModel.fromMap({...doc.data(), 'userId': doc.id}))
+              .toList();
+        });
   }
 
   @override
@@ -880,7 +952,26 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
               ],
             ),
             // Maç Arayanlar
-            _buildMatchSeekersTab(),
+            StreamBuilder<List<UserModel>>(
+              stream: _getFilteredPlayersStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Hata oluştu: ${snapshot.error}'));
+                }
+
+                final players = snapshot.data ?? [];
+
+                if (players.isEmpty) {
+                  return const Center(child: Text('Müsait oyuncu bulunmuyor'));
+                }
+
+                return _buildMatchSeekersTab(players);
+              },
+            ),
           ],
         ),
       ),

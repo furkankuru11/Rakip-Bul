@@ -8,13 +8,11 @@ import 'package:rakipbul/screens/group_members_screen.dart';
 class ChatScreen extends StatefulWidget {
   final String friendId;
   final String friendName;
-  final bool isGroup;
 
   const ChatScreen({
     super.key,
     required this.friendId,
     required this.friendName,
-    required this.isGroup,
   });
 
   @override
@@ -112,71 +110,15 @@ class _ChatScreenState extends State<ChatScreen> {
           elevation: 1,
           backgroundColor: Colors.green.shade50,
           titleSpacing: 0,
-          title: Row(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.green.shade50,
-                child: Text(
-                  widget.friendName[0].toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Text(widget.friendName),
+              if (_isOnline)
+                const Text(
+                  'çevrimiçi',
+                  style: TextStyle(fontSize: 12),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: widget.isGroup
-                    ? GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => GroupMembersScreen(
-                              groupId: widget.friendId,
-                              groupName: widget.friendName,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.friendName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const Text(
-                              'Üyeleri görüntülemek için tıklayın',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.friendName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            _isOnline ? 'çevrimiçi' : 'çevrimdışı',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _isOnline ? Colors.green : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
             ],
           ),
         ),

@@ -330,18 +330,6 @@ class ChatService {
 
       socket.on('receive_message', _handleReceiveMessage);
     }
-
-    socket.on('group_message', (data) async {
-      print('📩 Grup mesajı alındı: $data');
-      await _saveMessageToLocal(data);
-
-      // Stream'e yeni mesajı gönder
-      _safeEmit(_messageStreamController, data);
-
-      if (onMessageReceived != null) {
-        onMessageReceived!(data);
-      }
-    });
   }
 
   void _handleReceiveMessage(dynamic data) async {

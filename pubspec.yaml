@@ -7,4 +7,9 @@ version: 1.0.0+1
 environment:
   sdk: '>=3.2.3 <4.0.0'
 
+dependencies:
+  flutter:
+    sdk: flutter
+  badges: ^3.1.2
+
 # ... diğer ayarlar ... 

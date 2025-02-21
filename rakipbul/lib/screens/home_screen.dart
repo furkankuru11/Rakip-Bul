@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notification_screen.dart';
+import 'package:badges/badges.dart' as badges;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -199,7 +200,36 @@ class _HomeScreenState extends State<HomeScreen> {
                             builder: (context) => const NotificationScreen()),
                       );
                     },
-                    icon: const Icon(Icons.notifications),
+                    icon: StreamBuilder<QuerySnapshot>(
+                      stream: _firestore
+                          .collection('friendRequests')
+                          .where('receiverId', isEqualTo: currentUserId)
+                          .where('status', isEqualTo: 'pending')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final pendingRequestCount = snapshot.data?.docs.length ?? 0;
+                        
+                        return badges.Badge(
+                          showBadge: pendingRequestCount > 0,
+                          badgeContent: Text(
+                            pendingRequestCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                          badgeStyle: badges.BadgeStyle(
+                            badgeColor: Colors.red,
+                            padding: const EdgeInsets.all(6),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.notifications,
+                            size: 30,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                   // Profil Avatar
                   Padding(

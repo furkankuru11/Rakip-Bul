@@ -8,7 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'dart:async'; // TimeoutException için bu import'u ekleyin
+import 'dart:async';
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -757,43 +758,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const Divider(),
-          if (selectedAvailabilities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Henüz müsait zaman eklenmemiş'),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: selectedAvailabilities.length,
-              itemBuilder: (context, index) {
-                final availability = selectedAvailabilities[index];
-                return Dismissible(
-                  key: Key(index.toString()),
-                  background: Container(
-                    color: Colors.red.shade100,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 16),
-                    child: const Icon(Icons.delete, color: Colors.red),
-                  ),
-                  direction: DismissDirection.endToStart,
-                  onDismissed: (direction) {
-                    setState(() {
-                      selectedAvailabilities.removeAt(index);
-                      _saveAvailability(selectedAvailabilities);
-                    });
-                  },
-                  child: ListTile(
-                    leading: const Icon(Icons.event_available),
-                    title: Text(_formatDate(availability.date!)),
-                    subtitle: Text(
-                      '${_formatTime(availability.startTime!)} - ${_formatTime(availability.endTime!)}',
-                    ),
-                  ),
+          StreamBuilder<DocumentSnapshot>(
+            stream: _firestore.collection('users').doc(userData!['userId']).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(child: Text('Bir hata oluştu'));
+              }
+
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final data = snapshot.data?.data() as Map<String, dynamic>?;
+              final availabilities = List<Map<String, dynamic>>.from(data?['availability'] ?? []);
+
+              if (availabilities.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Henüz müsait zaman eklenmemiş'),
                 );
-              },
-            ),
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: availabilities.length,
+                itemBuilder: (context, index) {
+                  final availability = availabilities[index];
+                  final date = DateTime.parse(availability['date']);
+                  return Dismissible(
+                    key: Key(index.toString()),
+                    background: Container(
+                      color: Colors.red.shade100,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 16),
+                      child: const Icon(Icons.delete, color: Colors.red),
+                    ),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (direction) {
+                      availabilities.removeAt(index);
+                      _firestore.collection('users').doc(userData!['userId']).update({
+                        'availability': availabilities,
+                        'isAvailable': availabilities.isNotEmpty,
+                      });
+                    },
+                    child: ListTile(
+                      leading: const Icon(Icons.event_available),
+                      title: Text('${date.day}/${date.month}/${date.year}'),
+                      subtitle: Text(
+                        '${availability['startTime']} - ${availability['endTime']}',
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1079,8 +1099,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
@@ -1168,40 +1188,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _saveAvailability(List<Availability> availabilities) async {
     try {
+      if (availabilities.isEmpty) return;
+
+      // SharedPreferences'dan device_id al
       final prefs = await SharedPreferences.getInstance();
       final deviceId = prefs.getString('device_id');
 
-      if (deviceId != null) {
-        // Önce userData'yı güncelle
-        setState(() {
-          if (userData != null) {
-            userData!['availability'] =
-                availabilities.map((a) => a.toMap()).toList();
-          }
-        });
-
-        // Firestore'u güncelle
-        await _firestore.collection('users').doc(deviceId).update({
-          'availability': availabilities.map((a) => a.toMap()).toList(),
-        });
-
-        // Başarı mesajı göster
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Müsaitlik zamanları kaydedildi')),
-          );
-        }
-
-        print(
-            '✅ Müsaitlik zamanları kaydedildi: ${availabilities.length} zaman');
+      if (deviceId == null) {
+        throw 'Kullanıcı ID bulunamadı';
       }
+
+      // Son eklenen müsaitlik bilgisini al
+      final lastAvailability = availabilities.last;
+      
+      // Firestore'a kaydetmek için availabilities'i Map listesine dönüştür
+      final availabilityMaps = availabilities.map((a) => {
+        'date': a.date?.toIso8601String(),
+        'startTime': a.startTime?.format(context),
+        'endTime': a.endTime?.format(context),
+        'latitude': a.latitude,
+        'longitude': a.longitude,
+      }).toList();
+
+      // Kullanıcı dokümanını güncelle
+      await _firestore.collection('users').doc(deviceId).update({
+        'availability': availabilityMaps,
+        'isSearchingMatch': true,
+        'isAvailable': true,
+        'availabilityEndTime': DateTime(
+          lastAvailability.date!.year,
+          lastAvailability.date!.month,
+          lastAvailability.date!.day,
+          lastAvailability.endTime!.hour,
+          lastAvailability.endTime!.minute,
+        ).toIso8601String(),
+        'availabilityStartTime': DateTime(
+          lastAvailability.date!.year,
+          lastAvailability.date!.month,
+          lastAvailability.date!.day,
+          lastAvailability.startTime!.hour,
+          lastAvailability.startTime!.minute,
+        ).toIso8601String(),
+        'availabilityLocation': {
+          'latitude': lastAvailability.latitude,
+          'longitude': lastAvailability.longitude,
+        },
+      });
+
+      print('✅ Müsaitlik durumu kaydedildi: $deviceId');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Müsaitlik durumu kaydedildi')),
+      );
     } catch (e) {
       print('❌ Müsaitlik kaydetme hatası: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Kaydetme hatası: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Müsaitlik durumu kaydedilemedi')),
+      );
     }
   }
 }

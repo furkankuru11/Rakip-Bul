@@ -17,6 +17,9 @@ class UserModel {
   final double? distance;
   final double rating;
   final int ratingCount;
+  final String? availabilityStartTime;
+  final String? availabilityEndTime;
+  final Map<String, dynamic>? availabilityLocation;
 
   UserModel({
     required this.userId,
@@ -37,6 +40,9 @@ class UserModel {
     this.distance,
     this.rating = 0.0,
     this.ratingCount = 0,
+    this.availabilityStartTime,
+    this.availabilityEndTime,
+    this.availabilityLocation,
   });
 
   Map<String, dynamic> toMap() {
@@ -59,6 +65,9 @@ class UserModel {
       'distance': distance,
       'rating': rating,
       'ratingCount': ratingCount,
+      'availabilityStartTime': availabilityStartTime,
+      'availabilityEndTime': availabilityEndTime,
+      'availabilityLocation': availabilityLocation,
     };
   }
 
@@ -83,6 +92,9 @@ class UserModel {
       distance: map['distance']?.toDouble(),
       rating: (map['rating'] ?? 0.0).toDouble(),
       ratingCount: map['ratingCount'] ?? 0,
+      availabilityStartTime: map['availabilityStartTime'],
+      availabilityEndTime: map['availabilityEndTime'],
+      availabilityLocation: map['availabilityLocation'],
     );
   }
 }

@@ -10,6 +10,7 @@ import 'chat_list_screen.dart';
 import '../services/chat_service.dart';
 import 'date_screen.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 
 class AnaSayfa extends StatefulWidget {
   const AnaSayfa({super.key});
@@ -42,6 +43,16 @@ class _AnaSayfaState extends State<AnaSayfa> with WidgetsBindingObserver {
       _listenToUnreadMessages();
     } catch (e) {
       print('❌ Initialize hatası: $e');
+    }
+  }
+  Future<void> _requestLocationPermission() async {
+  final status = await Permission.location.request();
+  
+  if (status.isDenied) {
+    // Kullanıcı izni reddetti
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Konum izni gerekli')),
+    );
     }
   }
 
