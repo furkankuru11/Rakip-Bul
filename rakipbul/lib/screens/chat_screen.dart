@@ -180,33 +180,17 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         ),
-        body: Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50, // Hafif gri arka plan
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildMessageList(),
-              ),
-              Container(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 8,
-                  left: 16,
-                  right: 16,
-                  top: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
+        body: Column(
+          children: [
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildMessageList(),
+            ),
+            Container(
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
                 child: Row(
                   children: [
                     Expanded(
@@ -218,13 +202,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: TextField(
                           controller: _messageController,
                           focusNode: _focusNode,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             hintText: 'Mesaj yazın...',
-                            hintStyle: TextStyle(color: Colors.grey.shade600),
                             border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
                             ),
                           ),
                           maxLines: null,
@@ -235,17 +218,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     const SizedBox(width: 8),
                     Material(
-                      color: Colors.green.shade500,
+                      color: Colors.green,
                       borderRadius: BorderRadius.circular(24),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(24),
                         onTap: () => _sendMessage(_messageController.text),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          child: const Icon(
-                            Icons.send_rounded,
+                        child: const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: Icon(
+                            Icons.send,
                             color: Colors.white,
-                            size: 24,
                           ),
                         ),
                       ),
@@ -253,8 +235,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
