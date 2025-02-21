@@ -1,0 +1,2 @@
+/Users/kuru/Github/Rakip-Bul/rakipbul/android/app/.cxx/Debug/f6x40663/arm64-v8a/CMakeFiles/edit_cache.dir
+/Users/kuru/Github/Rakip-Bul/rakipbul/android/app/.cxx/Debug/f6x40663/arm64-v8a/CMakeFiles/rebuild_cache.dir

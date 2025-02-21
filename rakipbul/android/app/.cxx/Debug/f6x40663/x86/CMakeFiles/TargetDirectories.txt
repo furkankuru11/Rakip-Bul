@@ -1,0 +1,2 @@
+/Users/kuru/Github/Rakip-Bul/rakipbul/android/app/.cxx/Debug/f6x40663/x86/CMakeFiles/edit_cache.dir
+/Users/kuru/Github/Rakip-Bul/rakipbul/android/app/.cxx/Debug/f6x40663/x86/CMakeFiles/rebuild_cache.dir
