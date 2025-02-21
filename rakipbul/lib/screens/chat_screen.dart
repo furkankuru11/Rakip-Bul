@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rakipbul/services/chat_service.dart';
 import 'dart:async';
 import 'package:rakipbul/screens/group_members_screen.dart';
+import 'package:rakipbul/screens/other_profile.dart';
 
 class ChatScreen extends StatefulWidget {
   final String friendId;
@@ -107,19 +108,86 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: Colors.white,
           elevation: 1,
-          backgroundColor: Colors.green.shade50,
-          titleSpacing: 0,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.friendName),
-              if (_isOnline)
-                const Text(
-                  'çevrimiçi',
-                  style: TextStyle(fontSize: 12),
+          leadingWidth: 40,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios, size: 20, color: Colors.grey.shade800),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: InkWell(
+            onTap: () async {
+              // Kullanıcı bilgilerini Firestore'dan al
+              final userDoc = await FirebaseFirestore.instance
+                  .collection('users')
+                  .where('deviceId', isEqualTo: widget.friendId)
+                  .get();
+
+              if (userDoc.docs.isNotEmpty && mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => OtherProfileScreen(
+                      userData: {
+                        ...userDoc.docs.first.data(),
+                        'userId': widget.friendId,
+                      },
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.green.shade50,
+                  child: Text(
+                    widget.friendName[0].toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.green.shade700,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.friendName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade900,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _isOnline ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            _isOnline ? 'Çevrimiçi' : 'Çevrimdışı',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         body: Column(
