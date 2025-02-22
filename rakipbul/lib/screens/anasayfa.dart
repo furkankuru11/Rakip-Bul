@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
-import 'map_screen.dart';
 import 'profile_screen.dart';
-import 'notification_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'chat_screen.dart';
@@ -11,6 +9,7 @@ import '../services/chat_service.dart';
 import 'date_screen.dart';
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
+import 'search_match_screen.dart';
 
 class AnaSayfa extends StatefulWidget {
   const AnaSayfa({super.key});
@@ -125,7 +124,7 @@ class _AnaSayfaState extends State<AnaSayfa> with WidgetsBindingObserver {
 
   final List<Widget> _screens = [
     const DateScreen(),
-    const MapScreen(),
+    const SearchMatchScreen(),
     const HomeScreen(),
     const ChatListScreen(),
     const ProfileScreen(),
@@ -179,9 +178,9 @@ class _AnaSayfaState extends State<AnaSayfa> with WidgetsBindingObserver {
                 label: 'Takvim',
               ),
               const BottomNavigationBarItem(
-                icon: Icon(Icons.map_outlined),
-                activeIcon: Icon(Icons.map),
-                label: 'Harita',
+                icon: Icon(Icons.sports_soccer_outlined),
+                activeIcon: Icon(Icons.sports_soccer),
+                label: 'Maç Arayanlar',
               ),
               const BottomNavigationBarItem(
                 icon: Icon(Icons.home_outlined),

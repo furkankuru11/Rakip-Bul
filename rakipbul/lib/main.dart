@@ -12,6 +12,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'services/chat_service.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Arka planda bildirim geldiğinde
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+// Bildirim kanalı oluştur
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'friend_requests', 
+  'Arkadaşlık İstekleri',
+  importance: Importance.high,
+);
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   print('Uygulama başlatılıyor...');
@@ -27,22 +43,17 @@ void main() async {
     return; // Firebase başlatılamazsa uygulamayı başlatma
   }
 
-  // Notification işlemlerini try-catch içine alalım
-  try {
-    if (Platform.isIOS) {
-      print('iOS için bildirim izinleri isteniyor...');
-      final settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: true, // Geçici izin ekledik
-      );
-      print('Bildirim izin durumu: ${settings.authorizationStatus}');
-    }
-  } catch (e) {
-    print('Bildirim ayarları yapılırken hata: $e');
-    // Bildirim hatası uygulamayı engellemeyecek
-  }
+  // FCM başlat
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
 
   print('Uygulama arayüzü başlatılıyor...');
   runApp(const HaliSahaApp());

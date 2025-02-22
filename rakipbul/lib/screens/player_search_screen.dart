@@ -10,7 +10,12 @@ import 'package:geolocator/geolocator.dart';
 
 
 class PlayerSearchScreen extends StatefulWidget {
-  const PlayerSearchScreen({super.key});
+  final int initialTabIndex;
+  
+  const PlayerSearchScreen({
+    super.key,
+    this.initialTabIndex = 0,
+  });
 
   @override
   State<PlayerSearchScreen> createState() => _PlayerSearchScreenState();
@@ -789,6 +794,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen>
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
+      initialIndex: widget.initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Oyuncu Ara'),
